@@ -5,6 +5,7 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 from collections import defaultdict
 import PyPDF2  # To read PDF files
+import re  # For highlighting query terms
 
 # Function to read text from PDF or TXT files
 def read_file(file):
@@ -17,13 +18,13 @@ def read_file(file):
     else:  # Assuming it's a TXT file
         return file.read().decode("utf-8").strip()
 
-# Function to highlight query terms in the document text
-def highlight_query(text, query):
-    for term in query.split():
-        # Create a highlighted version of the term
-        highlighted_term = f"<span style='background-color: yellow; color: black;'>{term}</span>"
-        text = text.replace(term, highlighted_term)
-    return text
+# Function to highlight query terms in the text
+def highlight_text(text, query):
+    if not query:
+        return text
+    pattern = re.compile(re.escape(query), re.IGNORECASE)
+    highlighted = pattern.sub(lambda x: f"<mark>{x.group(0)}</mark>", text)
+    return highlighted
 
 # Vector Space Model
 class VectorSpaceModel:
@@ -40,16 +41,16 @@ class VectorSpaceModel:
     def retrieve_top_n(self, query_string, n=5):
         scores = self.query(query_string)
         top_indices = np.argsort(scores)[-n:][::-1]
-        
+
         # Ensure the document containing the query term is on top, if it exists
         if any(query_string in self.documents[i] for i in top_indices):
             top_documents = [(self.documents[i], scores[i]) for i in top_indices if query_string in self.documents[i]]
             if top_documents:
                 top_documents = [(top_documents[0][0], scores[self.documents.index(top_documents[0][0])])] + top_documents[1:]
-        
+
         else:
             top_documents = [(self.documents[i], scores[i]) for i in top_indices]
-        
+
         return top_documents
 
 # TF-IDF Model
@@ -88,14 +89,14 @@ class TFIDF:
         query_terms = query.split()
         scores = [(doc_idx, self.tfidf_score(doc_idx, query_terms)) for doc_idx in range(self.doc_count)]
         scores.sort(key=lambda x: x[1], reverse=True)
-        
+
         # Ensure document containing query term appears at the top, if present
         for term in query_terms:
             for i, (doc_idx, score) in enumerate(scores):
                 if term in self.documents[doc_idx] and score > 0:
                     scores.insert(0, scores.pop(i))
                     break
-        
+
         return scores
 
 # BM25 Model
@@ -147,11 +148,11 @@ class BM25:
                 if term in self.documents[doc_idx] and score > 0:
                     scores.insert(0, scores.pop(i))
                     break
-        
+
         return scores
 
 # Streamlit App
-st.title("DocuSearch")
+st.title("Document Search with Multiple Models")
 
 # Create tabs
 tab_vsm, tab_tfidf, tab_bm25 = st.tabs(["Vector Space Model", "TF-IDF", "BM25"])
@@ -165,16 +166,16 @@ def handle_file_upload(tab_name):
         
         # Set max_value based on the number of uploaded documents
         max_docs = min(len(documents), 10)  # Limit to 10 as per file uploader
-        top_n = st.number_input("Number of top documents to retrieve:", min_value=1, max_value=max_docs, value=min(5, max_docs))
+        top_n = st.number_input(f"Number of top documents to retrieve for {tab_name}:", min_value=1, max_value=max_docs, value=min(5, max_docs), key=f"top_n_{tab_name}")
 
-        if st.button(f"Search with {tab_name}"):
+        if st.button(f"Search for {tab_name}"):
             if tab_name == "Vector Space Model":
                 model = VectorSpaceModel(documents)
                 results = model.retrieve_top_n(query, n=top_n)
                 st.write("Top documents:")
                 for doc, score in results:
                     if score > 0:  # Display only if score is positive
-                        highlighted_doc = highlight_query(doc, query)
+                        highlighted_doc = highlight_text(doc, query)
                         st.markdown(f"Document: {highlighted_doc} | Score: {score:.4f}", unsafe_allow_html=True)
 
             elif tab_name == "TF-IDF":
@@ -183,7 +184,7 @@ def handle_file_upload(tab_name):
                 st.write("Ranked documents:")
                 for doc_idx, score in rankings:
                     if score > 0:  # Display only if score is positive
-                        highlighted_doc = highlight_query(documents[doc_idx], query)
+                        highlighted_doc = highlight_text(documents[doc_idx], query)
                         st.markdown(f"Document {doc_idx}: {highlighted_doc} (Score: {score:.4f})", unsafe_allow_html=True)
 
             elif tab_name == "BM25":
@@ -192,7 +193,7 @@ def handle_file_upload(tab_name):
                 st.write("Ranked documents:")
                 for doc_idx, score in rankings:
                     if score > 0:  # Display only if score is positive
-                        highlighted_doc = highlight_query(documents[doc_idx], query)
+                        highlighted_doc = highlight_text(documents[doc_idx], query)
                         st.markdown(f"Document {doc_idx}: {highlighted_doc} (Score: {score:.4f})", unsafe_allow_html=True)
 
 # Handle each tab's file upload and search
