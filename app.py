@@ -25,7 +25,7 @@ def highlight_text(text, query):
     if not query:
         return text
     pattern = re.compile(re.escape(query), re.IGNORECASE)
-    highlighted = pattern.sub(lambda x: f"<span style='background-color: #FFCCCB;'>{x.group(0)}</span>", text)
+    highlighted = pattern.sub(lambda x: f"<span style='background-color: #FFD700;'>{x.group(0)}</span>", text)
     return highlighted
 
 
